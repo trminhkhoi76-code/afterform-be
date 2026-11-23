@@ -32,6 +32,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test catalog import planning
+        run: node --test tests/*.test.mjs
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

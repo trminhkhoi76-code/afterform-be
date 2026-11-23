@@ -27,8 +27,8 @@ Existing database/schema naming is unchanged: on Neon the database is
 Docker Compose service hostname for local development.
 
 Optional S3-compatible media storage stays **disabled** until configured.
-The bucket defaults to `afterform-media`. To enable it, set
-`AFTERFORM_MEDIA_ENABLED=true` and the Neon storage credentials
+To enable the private adapter, set `AFTERFORM_MEDIA_ENABLED=true`,
+`AFTERFORM_MEDIA_BUCKET` to a separate private bucket and the Neon storage credentials
 (`AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`). No public media upload route is exposed.
 
@@ -44,8 +44,8 @@ The bucket defaults to `afterform-media`. To enable it, set
   `main` still deploys.
 - Vercel builds [`Dockerfile.vercel`](../Dockerfile.vercel) directly on
   `main` pushes/merges. No separate CLI deploy or webhook is configured.
-- GitHub Actions has **one** workflow, `java-ci.yml`, which builds/tests
-  Java on PRs and `main` with disposable PostgreSQL. **It does not deploy.**
+- GitHub Actions runs `java-ci.yml` on PRs and `main` with disposable PostgreSQL.
+  The on-demand [agent workflow](catalog-operations.md) prepares and tests candidate patches.
 - `PORT` comes from Vercel (often 80); Spring already uses
   `server.port=${PORT:8081}`. Do not hard-code another port.
 

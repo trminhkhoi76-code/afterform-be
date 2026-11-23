@@ -47,21 +47,27 @@ Expect `200` / `{"status":"UP"}` when the app and health contributors start.
 `GET /api/v1/public/stores/afterform/bootstrap` may return 404 until an
 active store has a publication; that is normal and distinct from runtime 500.
 
-## 2. Object Storage — optional, private
+## 2. Object Storage
+
+The production `afterform-media` bucket serves public catalog assets. For the
+publication and media import workflow, see [catalog operations](catalog-operations.md).
+
+### Optional internal adapter for private files
 
 The internal Catalog media service uses the **AWS SDK for Java v2** with Neon's
-S3-compatible Object Storage. Bucket name: **`afterform-media`**.
+S3-compatible Object Storage. Use a separate private bucket such as
+**`afterform-private-media`** for this adapter.
 
 Creating/configuring the bucket is a Neon Console/cloud operation, **not**
-performed by this PR. Verify the private `afterform-media` bucket exists in
-the intended Neon project and branch (production) before enabling it.
+part of the Catalog runtime. Verify the private bucket exists in the intended
+Neon project and branch before enabling it.
 Never use public-read for raw uploaded customer media.
 
 Add these environment variables to Catalog's runtime *only when ready*:
 
 ```dotenv
 AFTERFORM_MEDIA_ENABLED=true
-AFTERFORM_MEDIA_BUCKET=afterform-media
+AFTERFORM_MEDIA_BUCKET=afterform-private-media
 AWS_ENDPOINT_URL_S3=https://YOUR_BRANCH.storage.YOUR_REGION.aws.neon.tech
 AWS_REGION=YOUR_NEON_STORAGE_REGION
 AWS_ACCESS_KEY_ID=YOUR_NEON_STORAGE_ACCESS_KEY
@@ -87,7 +93,7 @@ Normal CI: Java unit/integration tests + offline S3 SigV4 presigning tests.
 They use disposable PostgreSQL 16 and **do not call real Neon**.
 
 To verify actual Neon storage manually with temporary files after setting the
-`AWS_*` variables, set `AFTERFORM_MEDIA_BUCKET=afterform-media` and run:
+`AWS_*` variables, set `AFTERFORM_MEDIA_BUCKET=afterform-private-media` and run:
 
 ```bash
 NEON_LIVE_STORAGE_TEST=true mvn -B -ntp -pl catalog-service -Dtest=NeonMediaStorageLiveTests test
