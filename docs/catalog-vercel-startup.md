@@ -40,8 +40,8 @@ manually remove tables or history to "fix" this startup timeout.
 ## 2. One-time/manual migration OUTSIDE Vercel
 
 Merge the reviewed PR. In GitHub → repository **Settings → Environments →
-staging**, configure required reviewers and restrict deployment branches to
-`main`. Add three environment secrets:
+catalog-production-db**, configure required reviewers and restrict deployment branches to
+`main`. Add three environment secrets (targeting the selected Neon **production** branch). Create a restore point / database branch before first migration if data is valuable:
 
 - `CATALOG_MIGRATION_JDBC_URL`: direct **non-`-pooler`** Neon JDBC
   connection (e.g. `jdbc:postgresql://YOUR_DIRECT_HOST:5432/neondb?sslmode=require`).
@@ -52,7 +52,7 @@ This is **separate from Vercel Settings**; GitHub cannot read Vercel secrets.
 Never paste actual credentials into Git files, CI logs or a chat.
 
 Run GitHub Actions → **Apply Catalog Flyway migrations (manual)** → **Run
-workflow** on `main`. Approve the `staging` environment if configured.
+workflow** on `main`. Approve the `catalog-production-db` environment if configured.
 This runs the same Flyway migration on a GitHub-hosted runner with no Vercel HTTP
 startup deadline. Repeated executions validate existing migrations and apply
 only new versions. The runner refuses Neon `-pooler` connections and
