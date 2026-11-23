@@ -1,0 +1,122 @@
+name: Publish staging images and optional Coolify deploy
+
+# Staging release is manual; pull requests and main pushes never deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_to_staging:
+        description: "Trigger Coolify deployment after successful image publication?"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.repository == 'trminhkhoi76-code/afterform-be'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: staging_ci
+          POSTGRES_PASSWORD: staging_ci
+          POSTGRES_DB: staging_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U staging_ci -d staging_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/staging_ci
+      SPRING_DATASOURCE_USERNAME: staging_ci
+      SPRING_DATASOURCE_PASSWORD: staging_ci
+      COMMERCE_DB_URL: jdbc:postgresql://localhost:5432/staging_ci
+      COMMERCE_DB_USERNAME: staging_ci
+      COMMERCE_DB_PASSWORD: staging_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Verify Java integration tests
+        run: mvn -B -ntp clean verify
+      - name: Validate staging Compose syntax
+        env:
+          CATALOG_DB_PASSWORD: ci-placeholder
+          COMMERCE_DB_PASSWORD: ci-placeholder
+        run: docker compose -f deploy/staging/compose.yml config --quiet
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [catalog, commerce]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/${{ matrix.service }}.Dockerfile
+          platforms: linux/amd64
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/afterform-be-${{ matrix.service }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/afterform-be-${{ matrix.service }}:staging
+
+  deploy:
+    if: ${{ inputs.deploy_to_staging }}
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    permissions:
+      contents: read
+    env:
+      COOLIFY_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_DEPLOY_WEBHOOK }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+    steps:
+      - name: Check deploy credentials and HTTPS URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$COOLIFY_DEPLOY_WEBHOOK" || { echo 'Missing COOLIFY_DEPLOY_WEBHOOK'; exit 1; }
+          test -n "$COOLIFY_TOKEN" || { echo 'Missing COOLIFY_TOKEN'; exit 1; }
+          case "$COOLIFY_DEPLOY_WEBHOOK" in
+            https://*) ;;
+            *) echo 'Deploy webhook must use HTTPS'; exit 1 ;;
+          esac
+      - name: Trigger Coolify staging resource
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+               --connect-timeout 10 --max-time 45 \
+               --request POST "$COOLIFY_DEPLOY_WEBHOOK" \
+               --header "Authorization: Bearer $COOLIFY_TOKEN" >/dev/null
+          echo 'Coolify accepted deployment trigger. Verify rollout and app health in Coolify.'
