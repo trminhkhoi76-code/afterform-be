@@ -30,7 +30,7 @@ class InventoryServiceTests {
         var b=balances.findById(new BalanceId(store,variant)).orElseThrow();
         assertEquals(7,b.onHand());
         assertEquals(0,b.reserved());
-        assertEquals(2,movements.count());
+        assertEquals(2,movements.countByStoreId(store));
     }
 
     @Test void releaseAndCrossTenantBoundaries() {
