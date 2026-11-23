@@ -35,8 +35,13 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Maven tests and package
-        run: mvn -B -ntp clean verify
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Neon URI-to-JDBC adapter (no credentials)
+        run: npm run test:neon
+      - name: Verify Java build using requested npm run build
+        run: npm run build
       - name: Confirm both independently executable jars
         run: |
           test -f catalog-service/target/catalog-service-0.1.0-SNAPSHOT.jar
