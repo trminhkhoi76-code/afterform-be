@@ -1,8 +1,10 @@
-# AFTERFORM Backend (TODO)
+# AFTERFORM Backend
 
 This repository is reserved for the **API, persistence and authenticated admin services** of the AFTERFORM multi-store storefront engine. The frontend lives in [afterform](https://github.com/trminhkhoi76-code/afterform).
 
-> Status: **contract / roadmap only**. No backend API, authentication, database or production checkout is implemented yet.
+Catalog Service serves published storefront snapshots from Neon PostgreSQL through Vercel. Commerce Service exposes health. Remote admin writes, customer authentication and production checkout remain on the roadmap.
+
+[Run the agent workflow or import a catalog publication and media](docs/catalog-operations.md).
 
 ## First endpoint to implement
 
@@ -82,7 +84,6 @@ See the local Docker runbook before using a real database. PRs are stacked and m
 Catalog uses managed PostgreSQL directly through
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and
 `SPRING_DATASOURCE_PASSWORD` (Spring Data JPA + Flyway). No Neon SDK,
-Node.js adapter or CLI is required. Internal image storage can be enabled
-later via Neon S3-compatible Object Storage, bucket `afterform-media`.
+Node.js adapter or CLI is required for the runtime. Public catalog media is served from the Neon `afterform-media` bucket. Internal image storage can be configured with a separate private bucket.
 See [database and storage configuration](docs/neon-setup.md).
 

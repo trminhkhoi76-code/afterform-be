@@ -4,7 +4,7 @@
 
 `GET /api/v1/public/stores/{storeSlug}/bootstrap`
 
-This is a public read endpoint intended to hydrate one storefront in one request. No backend implementation exists yet.
+The Catalog API uses this public read endpoint to hydrate one storefront in one request.
 
 ## Example response (200)
 
@@ -81,6 +81,7 @@ This is a public read endpoint intended to hydrate one storefront in one request
 7. Product/media URLs should be publicly fetchable (HTTPS). `theme` colors must be six-digit hex values. `navigation.href` must be an internal `#/` route.
 8. No cookies, auth tokens or secrets are sent for this public request. CORS must allow the frontend's origin. Use `Cache-Control` / ETags as appropriate.
 9. Return 404 for unknown store; 5xx for errors. Non-200, invalid JSON, schema errors and client timeout trigger the frontend's **dummy fallback**.
+10. Product gallery entries can contain an `image` or an HTTPS `video` URL (MP4 or WebM), with optional `alt`. When both are present, `image` serves as the video poster and thumbnail.
 
 ## Deferred write endpoints (not yet implemented)
 

@@ -1,0 +1,297 @@
+name: AFTERFORM agent workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      brief:
+        description: "Storefront or Catalog change, with the expected business outcome"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  po:
+    name: Product Owner
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      backend: ${{ steps.revisions.outputs.backend }}
+      frontend: ${{ steps.revisions.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform-be
+          ref: ${{ github.sha }}
+          path: backend
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform
+          ref: main
+          path: frontend
+          persist-credentials: false
+      - id: revisions
+        name: Pin both source revisions
+        run: |
+          echo "backend=$(git -C backend rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$(git -C frontend rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Prepare PO brief
+        env:
+          BRIEF: ${{ inputs.brief }}
+          CODEX_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          if [[ "$CODEX_CONFIGURED" != true ]]; then
+            echo "Configure the OPENAI_API_KEY Actions secret before dispatching." >&2
+            exit 1
+          fi
+          if [[ -z "$BRIEF" || "${#BRIEF}" -gt 4000 ]]; then
+            echo "The brief must contain 1–4000 characters." >&2
+            exit 1
+          fi
+          cp backend/.github/agent-prompts/po.md "$RUNNER_TEMP/po-prompt.md"
+          printf '\n## Requested work\n\n%s\n' "$BRIEF" >> "$RUNNER_TEMP/po-prompt.md"
+      - name: Draft acceptance criteria
+        uses: openai/codex-action@4aac6da4b686168e147798ca841cf64ff0f027b8
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: '0.171.0'
+          safety-strategy: drop-sudo
+          permission-profile: ':read-only'
+          working-directory: ${{ github.workspace }}
+          codex-args: '["--skip-git-repo-check"]'
+          prompt-file: ${{ runner.temp }}/po-prompt.md
+          output-file: ${{ runner.temp }}/po.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-owner
+          path: ${{ runner.temp }}/po.md
+          if-no-files-found: error
+          retention-days: 7
+
+  dev:
+    name: Senior Developer
+    needs: po
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform-be
+          ref: ${{ needs.po.outputs.backend }}
+          path: backend
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform
+          ref: ${{ needs.po.outputs.frontend }}
+          path: frontend
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: product-owner
+          path: ${{ runner.temp }}
+      - name: Prepare developer brief
+        env:
+          BRIEF: ${{ inputs.brief }}
+        run: |
+          cp backend/.github/agent-prompts/developer.md "$RUNNER_TEMP/dev-prompt.md"
+          printf '\n## Requested work\n\n%s\n\n## PO handoff\n\n' "$BRIEF" >> "$RUNNER_TEMP/dev-prompt.md"
+          cat "$RUNNER_TEMP/po.md" >> "$RUNNER_TEMP/dev-prompt.md"
+      - name: Implement candidate changes
+        uses: openai/codex-action@4aac6da4b686168e147798ca841cf64ff0f027b8
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: '0.171.0'
+          safety-strategy: drop-sudo
+          permission-profile: ':workspace'
+          working-directory: ${{ github.workspace }}
+          codex-args: '["--skip-git-repo-check"]'
+          prompt-file: ${{ runner.temp }}/dev-prompt.md
+          output-file: ${{ runner.temp }}/developer.md
+      - name: Capture candidate patches
+        env:
+          BASE_BACKEND: ${{ needs.po.outputs.backend }}
+          BASE_FRONTEND: ${{ needs.po.outputs.frontend }}
+        run: |
+          for repo in backend frontend; do
+            case "$repo" in
+              backend) base="$BASE_BACKEND" ;;
+              frontend) base="$BASE_FRONTEND" ;;
+            esac
+            git -C "$repo" add -N -- .
+            git -C "$repo" diff --no-ext-diff --no-textconv --binary "$base" -- > "$RUNNER_TEMP/$repo.patch"
+            git -C "$repo" diff --quiet "$base" -- .github .gitmodules || {
+              echo "Agent patch changes CI or submodule configuration." >&2
+              exit 1
+            }
+          done
+          test -s "$RUNNER_TEMP/backend.patch" || test -s "$RUNNER_TEMP/frontend.patch"
+          printf 'backend %s\nfrontend %s\n' "$BASE_BACKEND" "$BASE_FRONTEND" > "$RUNNER_TEMP/source-revisions.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: candidate
+          path: |
+            ${{ runner.temp }}/backend.patch
+            ${{ runner.temp }}/frontend.patch
+            ${{ runner.temp }}/developer.md
+            ${{ runner.temp }}/source-revisions.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  verify:
+    name: Repository checks
+    needs: [po, dev]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: catalog_ci
+          POSTGRES_USER: catalog_ci
+          POSTGRES_PASSWORD: catalog_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U catalog_ci -d catalog_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/catalog_ci
+      SPRING_DATASOURCE_USERNAME: catalog_ci
+      SPRING_DATASOURCE_PASSWORD: catalog_ci
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform-be
+          ref: ${{ needs.po.outputs.backend }}
+          path: backend
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform
+          ref: ${{ needs.po.outputs.frontend }}
+          path: frontend
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: candidate
+          path: ${{ runner.temp }}
+      - name: Apply candidate on isolated sources
+        run: |
+          for repo in backend frontend; do
+            if test -s "$RUNNER_TEMP/$repo.patch"; then
+              git -C "$repo" apply -- "$RUNNER_TEMP/$repo.patch"
+            fi
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Check frontend syntax and tests
+        working-directory: frontend
+        run: |
+          for source in data.js store-loader.js runtime-config.js app.js admin.js checkout.js; do
+            node --check "$source"
+          done
+          node --test tests/*.test.js
+      - name: Verify Catalog and Commerce
+        working-directory: backend
+        run: |
+          node --test tests/*.test.mjs
+          mvn -B -ntp clean verify
+      - name: Smoke-test a published catalog through the storefront loader
+        working-directory: backend
+        env:
+          PGPASSWORD: catalog_ci
+        run: |
+          java -jar catalog-service/target/catalog-service-0.1.0-SNAPSHOT.jar > "$RUNNER_TEMP/catalog.log" 2>&1 &
+          catalog_pid=$!
+          trap 'kill "$catalog_pid" 2>/dev/null || true' EXIT
+          if ! curl -fsS --retry 30 --retry-delay 1 --retry-connrefused --max-time 4 \
+              http://127.0.0.1:8081/actuator/health; then
+            cat "$RUNNER_TEMP/catalog.log"
+            exit 1
+          fi
+          psql -h 127.0.0.1 -U catalog_ci -d catalog_ci -v ON_ERROR_STOP=1 <<'SQL'
+          WITH store AS (
+            INSERT INTO catalog.stores (slug, name, status, published_version)
+            VALUES ('workflow-smoke', 'Workflow smoke', 'active', 1) RETURNING id
+          )
+          INSERT INTO catalog.publications (store_id, version, payload)
+            SELECT id, 1, '{"store":{"slug":"workflow-smoke","name":"Workflow smoke"},
+              "products":[{"id":"smoke-product","name":"Smoke product","price":12}]}'::jsonb FROM store;
+          SQL
+          node scripts/storefront-smoke.mjs http://127.0.0.1:8081 ../frontend workflow-smoke
+
+  tester:
+    name: Tester
+    needs: [po, dev, verify]
+    if: ${{ !cancelled() && needs.dev.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform-be
+          ref: ${{ needs.po.outputs.backend }}
+          path: backend
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: trminhkhoi76-code/afterform
+          ref: ${{ needs.po.outputs.frontend }}
+          path: frontend
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: product-owner
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: candidate
+          path: ${{ runner.temp }}
+      - name: Prepare independent review
+        env:
+          CHECKS: ${{ needs.verify.result }}
+        run: |
+          cp backend/.github/agent-prompts/tester.md "$RUNNER_TEMP/tester-prompt.md"
+          for repo in backend frontend; do
+            if test -s "$RUNNER_TEMP/$repo.patch"; then
+              git -C "$repo" apply -- "$RUNNER_TEMP/$repo.patch"
+              git -C "$repo" add -N -- .
+            fi
+          done
+          printf '\nRepository checks result: %s\n\n## PO handoff\n\n' "$CHECKS" >> "$RUNNER_TEMP/tester-prompt.md"
+          cat "$RUNNER_TEMP/po.md" >> "$RUNNER_TEMP/tester-prompt.md"
+          printf '\n## Developer handoff\n\n' >> "$RUNNER_TEMP/tester-prompt.md"
+          cat "$RUNNER_TEMP/developer.md" >> "$RUNNER_TEMP/tester-prompt.md"
+      - name: Evaluate acceptance and regressions
+        uses: openai/codex-action@4aac6da4b686168e147798ca841cf64ff0f027b8
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: '0.171.0'
+          safety-strategy: drop-sudo
+          permission-profile: ':read-only'
+          working-directory: ${{ github.workspace }}
+          codex-args: '["--skip-git-repo-check"]'
+          prompt-file: ${{ runner.temp }}/tester-prompt.md
+          output-file: ${{ runner.temp }}/tester.json
+          output-schema: >-
+            {"type":"object","properties":{"verdict":{"type":"string","enum":["pass","fail","blocked"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["verdict","findings"],"additionalProperties":false}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tester
+          path: ${{ runner.temp }}/tester.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Require passing tests and independent review
+        env:
+          CHECKS: ${{ needs.verify.result }}
+        run: |
+          test "$CHECKS" = success
+          jq -e '.verdict == "pass"' "$RUNNER_TEMP/tester.json"
