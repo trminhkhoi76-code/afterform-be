@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { createReadStream } from 'node:fs';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -57,12 +58,17 @@ export async function planImport({ catalog, expectedVersion, assets, sourceBase,
           !(process.platform === 'win32' && resolvedName.toLowerCase() === filename.toLowerCase())) {
         throw new Error(`Invalid asset path: ${filename}`);
       }
-      const bytes = await readFile(file);
-      if (!bytes.length) throw new Error(`Empty media file: ${filename}`);
-      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const hash = createHash('sha256');
+      let size = 0;
+      for await (const chunk of createReadStream(file)) {
+        size += chunk.length;
+        hash.update(chunk);
+      }
+      if (!size) throw new Error(`Empty media file: ${filename}`);
+      const sha256 = hash.digest('hex');
       const key = `catalog/${slug}/${sha256}/${filename}`;
       objects.set(filename, {
-        file, key, sha256, size: bytes.length,
+        file, key, sha256, size,
         contentType: mediaTypes[path.extname(filename).toLowerCase()],
         url: bucket + key, previousUrls: []
       });
