@@ -42,10 +42,10 @@ BEGIN
   -- Failure to publish another tenant's snapshot must be prevented.
   BEGIN
     UPDATE catalog.stores SET published_version=2 WHERE id=a;
-    SET CONSTRAINTS stores_current_publication_fk IMMEDIATE;
+    SET CONSTRAINTS catalog.stores_current_publication_fk IMMEDIATE;
     RAISE EXCEPTION 'Should have rejected invalid publication reference';
   EXCEPTION WHEN foreign_key_violation THEN
-    SET CONSTRAINTS stores_current_publication_fk DEFERRED;
+    SET CONSTRAINTS catalog.stores_current_publication_fk DEFERRED;
   END;
 END $$;
 ROLLBACK;
