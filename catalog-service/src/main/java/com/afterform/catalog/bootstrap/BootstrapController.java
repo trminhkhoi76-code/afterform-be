@@ -1,6 +1,7 @@
 package com.afterform.catalog.bootstrap;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.regex.Pattern;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -27,7 +28,7 @@ public class BootstrapController {
     }
 
     @GetMapping(value = "/{storeSlug}/bootstrap", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> bootstrap(@PathVariable String storeSlug) {
+    public ResponseEntity<Map<String, Object>> bootstrap(@PathVariable String storeSlug) {
         if (!STORE_SLUG.matcher(storeSlug).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid store slug");
         }
