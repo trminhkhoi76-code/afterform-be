@@ -76,3 +76,13 @@ docker compose up --build -d
 ```
 
 See the local Docker runbook before using a real database. PRs are stacked and must be merged in dependency order; files linked above are available after their respective PRs are merged.
+
+## Database & optional Object Storage
+
+Catalog uses managed PostgreSQL directly through
+`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and
+`SPRING_DATASOURCE_PASSWORD` (Spring Data JPA + Flyway). No Neon SDK,
+Node.js adapter or CLI is required. Internal image storage can be enabled
+later via Neon S3-compatible Object Storage, bucket `afterform-media`.
+See [database and storage configuration](docs/neon-setup.md).
+
