@@ -64,12 +64,26 @@ if (process.argv[1] && import.meta.url === new URL("file://" + resolve(process.a
           .every(k => !!env[k]) ? "credentials present" : "not configured"));
       process.exit(0);
     }
-    if (!["catalog", "commerce"].includes(action)) {
-      throw new Error("Choose catalog, commerce or check");
-    }
     const command = process.platform === "win32" ? "mvn.cmd" : "mvn";
-    const child = spawnSync(command, ["spring-boot:run"], {
-      cwd: resolve(action + "-service"), env, stdio: "inherit"
+    const root = resolve(".");
+    let args;
+    let cwd = root;
+    if (action === "build") {
+      args = ["-B", "-ntp", "clean", "verify"];
+    } else if (action === "storage-smoke") {
+      if (!env.AFTERFORM_MEDIA_BUCKET || !env.AWS_ENDPOINT_URL_S3) {
+        throw new Error("Storage smoke test requires Neon bucket and credentials");
+      }
+      env.NEON_LIVE_STORAGE_TEST = "true";
+      args = ["-pl", "catalog-service", "-Dtest=NeonMediaStorageLiveTests", "test"];
+    } else if (["catalog", "commerce"].includes(action)) {
+      cwd = resolve(action + "-service");
+      args = ["spring-boot:run"];
+    } else {
+      throw new Error("Choose build, catalog, commerce, storage-smoke or check");
+    }
+    const child = spawnSync(command, args, {
+      cwd, env, stdio: "inherit"
     });
     if (child.error) throw child.error;
     process.exit(child.status ?? 1);
