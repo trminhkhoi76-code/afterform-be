@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -52,7 +53,8 @@ public class OrderService {
 
         // Everything below is in one Commerce DB transaction; stock holds roll back on error.
         orders.saveAndFlush(order);
-        for(QuoteLine line:trustedQuote.lines()) {
+        for(QuoteLine line:trustedQuote.lines().stream()
+                .sorted(Comparator.comparing(l -> l.variantId().toString())).toList()) {
             UUID reservationId=UUID.randomUUID();
             inventory.reserve(storeId,line.variantId(),reservationId,line.quantity(),HOLD_TTL);
             items.save(new OrderItemEntity(storeId,order.id(),line,reservationId));
@@ -67,7 +69,8 @@ public class OrderService {
         var order=orders.lockByTenantAndId(storeId,orderId).orElseThrow();
         if(order.status()==OrderEntity.Status.CANCELLED) return false;
         List<OrderItemEntity> lines=items.findByStoreIdAndOrderId(storeId,orderId);
-        for(OrderItemEntity line:lines) {
+        for(OrderItemEntity line:lines.stream()
+                .sorted(Comparator.comparing(l -> l.variantId().toString())).toList()) {
             if(!inventory.release(line.reservationId()))
                 throw new IllegalStateException("Stock reservation is already finalized");
         }
