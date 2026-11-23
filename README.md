@@ -1,10 +1,10 @@
-# AFTERFORM Backend (TODO)
+# AFTERFORM Backend
 
 This repository is reserved for the **API, persistence and authenticated admin services** of the AFTERFORM multi-store storefront engine. The frontend lives in [afterform](https://github.com/trminhkhoi76-code/afterform).
 
-> Status: **contract / roadmap only**. No backend API, authentication, database or production checkout is implemented yet.
+> Status: **Java 25 / Spring Boot microservices scaffold + Catalog public bootstrap API implemented**. Catalog uses Spring Data JPA and Flyway. Authenticated admin APIs, inventory/order/payment integration and production hosting are still in progress.
 
-## First endpoint to implement
+## Public endpoint (implemented in Catalog Service)
 
 `GET /api/v1/public/stores/{storeSlug}/bootstrap`
 
@@ -76,3 +76,13 @@ docker compose up --build -d
 ```
 
 See the local Docker runbook before using a real database. PRs are stacked and must be merged in dependency order; files linked above are available after their respective PRs are merged.
+
+
+## Non-AWS dev/test staging
+
+- Local Docker: [runbook](docs/local-docker.md) (uses service containers and PostgreSQL volumes).
+- Manual GHCR image publishing with optional Coolify deployment: [AWS-free staging guide](docs/aws-free-staging.md).
+- Staging Compose resource: [deploy/staging/compose.yml](deploy/staging/compose.yml).
+- Both deploy and GHCR publish require a **manual GitHub Actions workflow** on `main`; they do not execute on PRs. No VPS or paid service is provisioned by this repository.
+
+**Repository state:** the legacy combined-schema SQL under `db/migrations/` is an architecture artifact, not an application Flyway migration. The actual Catalog Flyway migration lives in `catalog-service/src/main/resources/db/migration/`.
