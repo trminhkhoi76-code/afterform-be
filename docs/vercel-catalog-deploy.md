@@ -54,11 +54,18 @@ is created. No preview deployment should be created for `dev` or `feat/*`.
 Verify `GET /` and `GET /actuator/health` return HTTP 200. The public
 store bootstrap may return 404 if there is no published store.
 
-**Known limitation:** the previous Vercel cold start timed out after Flyway
-validation, before Tomcat began accepting TCP connections. This branch policy
-and CI simplification **do not claim to fix** that runtime timeout. Inspect
-the latest logs after redeploy; avoid disabling Flyway before schema migration
-is confirmed. Do not add additional deployment infrastructure for this scope.
+**Cold start budget:** Vercel fails a request with `FUNCTION_INVOCATION_FAILED`
+("could not connect to $PORT=80") when the container does not accept TCP
+connections within ~28s. Startup previously ran in `sfo1` against Neon in
+`ap-southeast-1`, so every Hikari/Flyway/Hibernate round trip crossed the
+Pacific and startup exceeded the budget. Mitigations:
+
+- `vercel.json` pins functions to `sin1`, next to the Neon database.
+- `Dockerfile.vercel` sets `SPRING_MAIN_LAZY_INITIALIZATION=true` (Flyway still
+  runs eagerly) and `-XX:TieredStopAtLevel=1` for faster JVM startup.
+
+Flyway and Hibernate `validate` stay enabled. If the Neon region changes, move
+the Vercel region with it.
 
 Vercel branch configuration:
 https://vercel.com/docs/project-configuration/git-configuration
