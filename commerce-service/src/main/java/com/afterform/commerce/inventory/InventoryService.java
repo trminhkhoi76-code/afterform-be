@@ -67,9 +67,9 @@ public class InventoryService {
     /** Returns false if already released/committed; caller can retry safely. */
     @Transactional
     public boolean release(UUID reservationId) {
-        InventoryReservation original=reservations.findById(reservationId).orElseThrow();
-        InventoryBalance balance=balances.lockById(original.stockId()).orElseThrow();
-        InventoryReservation current=reservations.findById(reservationId).orElseThrow();
+        // Lock the reservation first so concurrent commit/release cannot both see ACTIVE.
+        InventoryReservation current=reservations.lockById(reservationId).orElseThrow();
+        InventoryBalance balance=balances.lockById(current.stockId()).orElseThrow();
         if(current.state()!=InventoryReservation.State.ACTIVE) return false;
         balance.release(current.quantity());
         current.release();
@@ -80,9 +80,9 @@ public class InventoryService {
     /** Payment/order code calls this only after trusted confirmation, never from a browser flag. */
     @Transactional
     public boolean commit(UUID reservationId) {
-        InventoryReservation original=reservations.findById(reservationId).orElseThrow();
-        InventoryBalance balance=balances.lockById(original.stockId()).orElseThrow();
-        InventoryReservation current=reservations.findById(reservationId).orElseThrow();
+        // Lock the reservation first so concurrent commit/release cannot both see ACTIVE.
+        InventoryReservation current=reservations.lockById(reservationId).orElseThrow();
+        InventoryBalance balance=balances.lockById(current.stockId()).orElseThrow();
         if(current.state()!=InventoryReservation.State.ACTIVE) return false;
         if(!current.expiresAt().isAfter(clock.instant())) throw new IllegalStateException("Reservation expired");
         balance.commit(current.quantity());
