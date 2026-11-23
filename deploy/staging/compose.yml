@@ -1,0 +1,64 @@
+# Coolify staging Compose: deploy pre-built GHCR images, do not build source on VPS.
+# Configure HTTPS and catalog-service:8081 exposure through Coolify only.
+name: afterform-staging
+services:
+  catalog-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: catalog_staging
+      POSTGRES_USER: afterform_catalog
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Provide CATALOG_DB_PASSWORD in Coolify}
+    volumes:
+      - catalog-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afterform_catalog -d catalog_staging"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  commerce-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: commerce_staging
+      POSTGRES_USER: afterform_commerce
+      POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:?Provide COMMERCE_DB_PASSWORD in Coolify}
+    volumes:
+      - commerce-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afterform_commerce -d commerce_staging"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  catalog-service:
+    image: ghcr.io/trminhkhoi76-code/afterform-be-catalog:staging
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://catalog-db:5432/catalog_staging
+      SPRING_DATASOURCE_USERNAME: afterform_catalog
+      SPRING_DATASOURCE_PASSWORD: ${CATALOG_DB_PASSWORD:?Provide CATALOG_DB_PASSWORD in Coolify}
+      AFTERFORM_CORS_ORIGINS: ${AFTERFORM_CORS_ORIGINS:-https://trminhkhoi76-code.github.io}
+    expose:
+      - "8081"
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+
+  commerce-service:
+    image: ghcr.io/trminhkhoi76-code/afterform-be-commerce:staging
+    restart: unless-stopped
+    environment:
+      COMMERCE_DB_URL: jdbc:postgresql://commerce-db:5432/commerce_staging
+      COMMERCE_DB_USERNAME: afterform_commerce
+      COMMERCE_DB_PASSWORD: ${COMMERCE_DB_PASSWORD:?Provide COMMERCE_DB_PASSWORD in Coolify}
+    expose:
+      - "8082"
+    depends_on:
+      commerce-db:
+        condition: service_healthy
+
+volumes:
+  catalog-data:
+  commerce-data:
