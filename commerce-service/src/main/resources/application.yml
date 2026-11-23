@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: afterform-commerce-service
+server:
+  port: ${PORT:8082}
+  shutdown: graceful
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
