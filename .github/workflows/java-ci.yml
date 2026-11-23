@@ -37,6 +37,14 @@ jobs:
           cache: maven
       - name: Maven tests and package
         run: mvn -B -ntp clean verify
+      - name: Verify repeatable Catalog migration runner on disposable PostgreSQL
+        env:
+          CATALOG_MIGRATION_JDBC_URL: jdbc:postgresql://localhost:5432/catalog_ci
+          CATALOG_MIGRATION_USERNAME: catalog_ci
+          CATALOG_MIGRATION_PASSWORD: catalog_ci
+        run: |
+          mvn -B -ntp -pl catalog-service org.codehaus.mojo:exec-maven-plugin:3.6.2:java -Dexec.mainClass=com.afterform.catalog.migration.CatalogMigrationRunner -Dexec.classpathScope=runtime
+          mvn -B -ntp -pl catalog-service org.codehaus.mojo:exec-maven-plugin:3.6.2:java -Dexec.mainClass=com.afterform.catalog.migration.CatalogMigrationRunner -Dexec.classpathScope=runtime
       - name: Confirm both independently executable jars
         run: |
           test -f catalog-service/target/catalog-service-0.1.0-SNAPSHOT.jar

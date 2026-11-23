@@ -1,0 +1,46 @@
+name: Apply Catalog Flyway migrations (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-neon-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/main' && github.repository == 'trminhkhoi76-code/afterform-be'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    timeout-minutes: 15
+    env:
+      CATALOG_MIGRATION_JDBC_URL: ${{ secrets.CATALOG_MIGRATION_JDBC_URL }}
+      CATALOG_MIGRATION_USERNAME: ${{ secrets.CATALOG_MIGRATION_USERNAME }}
+      CATALOG_MIGRATION_PASSWORD: ${{ secrets.CATALOG_MIGRATION_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Verify required migration secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CATALOG_MIGRATION_JDBC_URL" || { echo 'Missing CATALOG_MIGRATION_JDBC_URL'; exit 1; }
+          test -n "$CATALOG_MIGRATION_USERNAME" || { echo 'Missing CATALOG_MIGRATION_USERNAME'; exit 1; }
+          test -n "$CATALOG_MIGRATION_PASSWORD" || { echo 'Missing CATALOG_MIGRATION_PASSWORD'; exit 1; }
+          echo 'Migration secrets present. Connection details are not logged.'
+      - name: Compile Catalog migration runner
+        run: mvn -B -ntp -pl catalog-service -am -DskipTests package
+      - name: Migrate and validate Neon Catalog schema (DIRECT JDBC only)
+        run: >-
+          mvn -B -ntp -pl catalog-service
+          org.codehaus.mojo:exec-maven-plugin:3.6.2:java
+          -Dexec.mainClass=com.afterform.catalog.migration.CatalogMigrationRunner
+          -Dexec.classpathScope=runtime
