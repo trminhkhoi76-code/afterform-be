@@ -7,12 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "mvn -B -ntp clean verify",
+    "build": "node scripts/neon-runtime.mjs build",
     "test:neon": "node --test scripts/neon-runtime.test.mjs",
     "start": "node scripts/neon-runtime.mjs catalog",
     "start:catalog": "node scripts/neon-runtime.mjs catalog",
     "start:commerce": "node scripts/neon-runtime.mjs commerce",
-    "neon:check": "node scripts/neon-runtime.mjs check"
+    "neon:check": "node scripts/neon-runtime.mjs check",
+    "neon:storage-smoke": "node scripts/neon-runtime.mjs storage-smoke"
   },
   "devDependencies": {
     "@neon/config": "^1.13.0"
