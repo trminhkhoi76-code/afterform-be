@@ -1,0 +1,21 @@
+name: Container build validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local Compose topology
+        run: docker compose --env-file .env.example config --quiet
+      - name: Build catalog image
+        run: docker build -f deploy/docker/catalog.Dockerfile -t afterform/catalog-service:ci .
+      - name: Build commerce image
+        run: docker build -f deploy/docker/commerce.Dockerfile -t afterform/commerce-service:ci .
