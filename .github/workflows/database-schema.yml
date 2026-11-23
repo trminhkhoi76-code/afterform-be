@@ -40,3 +40,7 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f db/migrations/0001_initial_design.sql
       - name: Verify tenant isolation, publishing and stock invariants
         run: psql -v ON_ERROR_STOP=1 -f db/tests/tenant-isolation.sql
+      - name: Apply catalog-owned Flyway SQL in one transaction
+        run: psql -1 -v ON_ERROR_STOP=1 -f catalog-service/src/main/resources/db/migration/V1__catalog_schema.sql
+      - name: Validate catalog multi-tenant constraints
+        run: psql -v ON_ERROR_STOP=1 -f db/tests/catalog-isolation.sql
