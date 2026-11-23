@@ -52,3 +52,27 @@ psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f db/tests/tenant-isolation.sql
 ```
 
 Use a **disposable test database**, never run the design/test scripts blindly on an existing production instance. Real backend APIs, admin auth, publishing, live checkout, payments and real inventory transactions remain TODO.
+
+
+## Java 25 + Spring Boot microservices (implementation branches)
+
+This repository is being built incrementally through linked PRs:
+
+- [Architecture ADR](docs/adr-0002-java-microservices.md)
+- [Implementation roadmap](docs/implementation-roadmap.md)
+- [Java / Maven development](docs/java-development.md)
+- [Catalog-owned Flyway schema](docs/catalog-schema.md)
+- [PostgreSQL-backed public API](docs/public-bootstrap-service.md)
+- [Local Docker Compose](docs/local-docker.md)
+
+The two independent apps are **Catalog Service** (8081) and **Commerce Service** (8082). Commerce still exposes health only; customer auth, products admin, payments and real order flows are tracked as separate issues. No fake live payments are enabled.
+
+Start local infrastructure using:
+
+```bash
+cp .env.example .env
+# Set a strong local-only CATALOG_DB_PASSWORD in .env
+docker compose up --build -d
+```
+
+See the local Docker runbook before using a real database. PRs are stacked and must be merged in dependency order; files linked above are available after their respective PRs are merged.
