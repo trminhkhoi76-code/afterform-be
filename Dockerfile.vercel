@@ -15,5 +15,8 @@ WORKDIR /app
 COPY --from=build --chown=afterform:afterform /workspace/catalog-service/target/catalog-service-0.1.0-SNAPSHOT.jar ./app.jar
 USER afterform
 ENV PORT=8081
+# Vercel requires the port to accept TCP within ~28s of a cold start. Lazy bean
+# initialization lets Tomcat bind sooner; Flyway still runs eagerly at startup.
+ENV SPRING_MAIN_LAZY_INITIALIZATION=true
 EXPOSE 8081
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-XX:TieredStopAtLevel=1", "-jar", "/app/app.jar"]
