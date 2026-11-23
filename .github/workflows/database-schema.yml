@@ -46,3 +46,5 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f db/tests/catalog-isolation.sql
       - name: Apply commerce-owned Flyway SQL in one transaction
         run: psql -1 -v ON_ERROR_STOP=1 -f commerce-service/src/main/resources/db/migration/V1__inventory.sql
+      - name: Apply commerce pending-order Flyway SQL
+        run: psql -1 -v ON_ERROR_STOP=1 -f commerce-service/src/main/resources/db/migration/V2__pending_orders.sql
