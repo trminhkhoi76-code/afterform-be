@@ -32,4 +32,5 @@ public class OrderItemEntity {
         this.productSnapshot=Map.of("sku",line.sku(),"name",line.productName());
     }
     public UUID reservationId() { return reservationId; }
+    public UUID variantId() { return variantId; }
 }
