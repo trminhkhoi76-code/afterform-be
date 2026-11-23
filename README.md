@@ -32,3 +32,23 @@ See [the API contract](docs/bootstrap-contract.md).
 - [ ] Add CI and environment configuration; never commit API secrets
 
 The frontend loads live data only if `runtime-config.js` has a valid `apiBaseUrl`. When missing, unreachable, timed out, or invalid, it uses the existing fashion demo data. API-mode admin is intentionally **read-only** until backend write endpoints are available.
+
+
+## Database design proposal (review before deployment)
+
+**Recommendation:** Managed PostgreSQL 16+ with tenant-scoped relational tables and `JSONB` for industry-specific product fields and storefront pages. The SQL below is **not deployed**; there are no production credentials or databases in this repository.
+
+- [ADR-0001: PostgreSQL vs MongoDB / DynamoDB, ERD, multitenancy, scaling](docs/adr-0001-database-architecture.md)
+- [Proposed PostgreSQL migration](db/migrations/0001_initial_design.sql)
+- [Database observability and backup runbook](docs/observability-runbook.md)
+- [Read-only monitoring SQL](db/queries/monitoring.sql)
+- [Bootstrap API contract](docs/bootstrap-contract.md)
+
+**Local schema validation once PostgreSQL is available:**
+
+```sh
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f db/migrations/0001_initial_design.sql
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f db/tests/tenant-isolation.sql
+```
+
+Use a **disposable test database**, never run the design/test scripts blindly on an existing production instance. Real backend APIs, admin auth, publishing, live checkout, payments and real inventory transactions remain TODO.
