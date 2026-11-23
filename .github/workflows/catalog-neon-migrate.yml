@@ -15,7 +15,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.repository == 'trminhkhoi76-code/afterform-be'
     runs-on: ubuntu-latest
     environment:
-      name: staging
+      name: catalog-production-db
     timeout-minutes: 15
     env:
       CATALOG_MIGRATION_JDBC_URL: ${{ secrets.CATALOG_MIGRATION_JDBC_URL }}
