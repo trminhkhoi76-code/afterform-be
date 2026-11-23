@@ -6,7 +6,7 @@ CREATE TABLE commerce.orders (
   id uuid PRIMARY KEY,
   store_id uuid NOT NULL,
   idempotency_key varchar(128) NOT NULL,
-  request_fingerprint char(64) NOT NULL,
+  request_fingerprint varchar(64) NOT NULL CHECK(length(request_fingerprint)=64),
   status varchar(20) NOT NULL CHECK(status IN ('PENDING','CANCELLED')),
   currency varchar(3) NOT NULL CHECK(currency ~ '^[A-Z]{3}$'),
   total numeric(18,2) NOT NULL CHECK(total >= 0),
