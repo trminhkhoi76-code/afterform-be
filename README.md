@@ -77,17 +77,12 @@ docker compose up --build -d
 
 See the local Docker runbook before using a real database. PRs are stacked and must be merged in dependency order; files linked above are available after their respective PRs are merged.
 
+## Database & optional Object Storage
 
-## Neon PostgreSQL + private Object Storage
+Catalog uses managed PostgreSQL directly through
+`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and
+`SPRING_DATASOURCE_PASSWORD` (Spring Data JPA + Flyway). No Neon SDK,
+Node.js adapter or CLI is required. Internal image storage can be enabled
+later via Neon S3-compatible Object Storage, bucket `afterform-media`.
+See [database and storage configuration](docs/neon-setup.md).
 
-Neon infrastructure is defined in [neon.ts](neon.ts), with a private `afterform-media` bucket and native Java PostgreSQL JDBC/Hibernate support. See [Neon setup and verification](docs/neon-setup.md) for the selected organization/project/branch, secure `.env.local` wiring, Spring Boot on Vercel, and optional live S3 PUT/GET/DELETE smoke tests.
-
-Convenience scripts:
-
-```bash
-npm run test:neon
-npm run build
-npm run start:catalog
-```
-
-The root npm build **executes Maven verification**, not a Node.js backend. Provisioning requires the separately authenticated Neon CLI and is not performed by committing infrastructure-as-code.

@@ -5,7 +5,3 @@
 .env.*
 !.env.example
 .DS_Store
-node_modules/
-.neon
-.neon/
-npm-debug.log

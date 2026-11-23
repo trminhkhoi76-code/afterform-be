@@ -1,108 +1,112 @@
-# Neon for AFTERFORM (Java 25 / Spring Boot / PostgreSQL)
+# PostgreSQL and optional Neon S3 storage (Catalog Service)
 
-This integration targets the **existing** Neon resources selected for this app:
+The Vercel app runs **Java 25 / Spring Boot / Spring Data JPA / Flyway** directly.
+Neon is a managed PostgreSQL provider, not a Java runtime integration. There is
+**no Neon CLI, Node wrapper, `neon.ts`, or npm build requirement** for this repo.
 
-- Org: `org-sweet-violet-18230803`
-- Project: `small-night-14869410`
-- Branch: `production`
-- Services: PostgreSQL (always included) and **private** Object Storage bucket `afterform-media`
-- Config: [neon.ts](../neon.ts) declares the bucket, while the linked `.neon` context selects the org, project and branch.
+## 1. PostgreSQL — already configured in Vercel
 
-**Do not create a second Neon project.** The `neon.ts` file is code-only until `neon deploy` actually runs. No credentials should be committed.
+The existing application's `spring.datasource` is configured by ordinary
+Spring Boot environment variables:
 
-## 1. Neon CLI setup in repository root
+| Environment variable | Value |
+| --- | --- |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://YOUR_NEON_HOST:5432/neondb?sslmode=require` |
+| `SPRING_DATASOURCE_USERNAME` | Your real Neon database username |
+| `SPRING_DATASOURCE_PASSWORD` | Secret DB password |
+| `CATALOG_DB_MAX_POOL_SIZE` | `3` (optional) |
+| `CATALOG_DB_MIN_IDLE` | `0` (optional) |
 
-```bash
-npm i -g neon@latest
-# Fallback if global installation fails:
-npx neon@latest --version
+**The database name `neondb` is valid.** In local Docker Compose,
+`catalog-db` is only the hostname of the local PostgreSQL service,
+`catalog_local` is its database name, and `catalog` is the PostgreSQL
+**schema** where Flyway creates the application tables. You do not have to
+rename Neon `neondb` to `catalog-db`.
 
-neon login
-neon init -y --org-id org-sweet-violet-18230803 \
-  --project-id small-night-14869410 \
-  --branch production \
-  --services postgres,object-storage
+Keep these values in Vercel Settings (Production/Preview as needed), not in
+`.env.example` or Git history. After changing environment variables,
+**redeploy** the Vercel container so the new runtime receives them.
 
-# Neon CLI may treat Postgres as implicit and reject it in --services.
-# If it does, retry only the service flag using --services object-storage.
-# Inspect git diff neon.ts after init: preserve the declared private bucket.
+The Catalog service uses the existing PostgreSQL JDBC driver, HikariCP and
+Flyway migration `V1__catalog_schema.sql`. No migration/schema change is
+included in this PR. A first startup may apply the migration; a production
+rollout should use a controlled migration job when load and concurrency grow.
 
-npm install
-neon config plan
-neon deploy
-neon env pull
-```
-
-`neon init` links the specified branch and may write `.neon` (gitignored); `neon deploy` reconciles resources and pulls Neon env vars into `.env.local`, or `.env` when that file already exists. Review any existing `.env` before deploy: Neon may modify it.
-
-**Auth:** if `neon login` opens a browser, complete OAuth there. If a CLI session expires or fails, repeat `neon login` and retry the original command. An existing account/project should not be replaced by a claimable database.
-
-## 2. Credentials returned by Neon
-
-PostgreSQL:
-- `DATABASE_URL` and usually `DATABASE_URL_UNPOOLED` (PostgreSQL URIs, **not JDBC URLs**).
-
-Private object storage, after deploy:
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_ENDPOINT_URL_S3`
-- `AWS_REGION`
-
-Add `AFTERFORM_MEDIA_BUCKET=afterform-media` **locally** to the ignored env file and to your real service runtime when you want to enable storage. The default bucket is private: do not grant public-read or add an anonymous upload route.
-
-`npm run start` (or `npm run start:catalog`) uses [scripts/neon-runtime.mjs](../scripts/neon-runtime.mjs) to load `.env.local` / `.env`, convert the unpooled Neon PostgreSQL URL to `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` and start Spring Boot.
-
-**Why JDBC?** AFTERFORM uses Spring Data JPA, Hibernate, Flyway, PostgreSQL JDBC and HikariCP. Do **not** replace the Java data layer with Neon JS HTTP/SQL drivers. The helper only converts the URL once. Spring Boot's native driver handles SQL connections and the existing Flyway migrations own the schema.
-
-`COMMERCE_DB_*` is also populated by the helper for local development when both logical schemas share one PostgreSQL cluster. **Do not share a production superuser across microservices**; issue separate restricted database roles once Commerce is deployed.
-
-## 3. Verify without leaking credentials
+### Health verification
 
 ```bash
-npm run test:neon
-npm run neon:check   # Prints presence/absence only, never credential values.
-npm run build        # Invokes mvn -B -ntp clean verify with Neon/JDBC env loaded.
-npm run start
-# In another terminal:
-curl -i http://localhost:8081/actuator/health
-curl -i http://localhost:8081/
-curl -i http://localhost:8081/api/v1/public/stores/afterform/bootstrap
+mvn -B -ntp clean verify
+# Requires DB credentials locally, unlike CI which uses disposable PostgreSQL.
+mvn -f catalog-service/pom.xml spring-boot:run
+curl -fsS http://localhost:8081/actuator/health
+curl -fsS http://localhost:8081/
 ```
 
-Expected: `GET /actuator/health` reports `UP` after Flyway/JPA successfully connect. `GET /` returns Catalog API JSON. The published bootstrap can return 404 until a store is published; a 404 for **unpublished store** is normal and not the previous Vercel runtime 500.
+On Vercel, check `https://YOUR_DEPLOYMENT.vercel.app/actuator/health`.
+Expect `200` / `{"status":"UP"}` when the app and health contributors start.
+`GET /api/v1/public/stores/afterform/bootstrap` may return 404 until an
+active store has a publication; that is normal and distinct from runtime 500.
 
-**Live Neon Object Storage round trip** (explicitly writes a temporary image and deletes it; requires real AWS_* vars from `neon deploy` and a bucket):
+## 2. Object Storage — optional, private
 
-```bash
-npm run neon:storage-smoke
-```
+The internal Catalog media service uses the **AWS SDK for Java v2** with Neon's
+S3-compatible Object Storage. Bucket name: **`afterform-media`**.
 
-This launches `NeonMediaStorageLiveTests`, which performs S3 **PUT → GET → DELETE** in bucket `afterform-media`. It is **opt-in**, is not run in ordinary PR CI, and must not be described as passed unless its actual command exits successfully. The normal `NeonMediaStorageTests` verifies SDK SigV4 signing offline.
+Creating/configuring the bucket is a Neon Console/cloud operation, **not**
+performed by this PR. Verify the private `afterform-media` bucket exists in
+the intended Neon project and branch (production) before enabling it.
+Never use public-read for raw uploaded customer media.
 
-**Safety:** GitHub Actions uses disposable PostgreSQL 16 rather than your `production` Neon branch. Do not run migration-producing `npm run build` against production customer data casually; create a Neon test branch to run integration tests, then promote reviewed Flyway migrations through a controlled deployment. Flyway may create/update application schema on first connection.
-
-## 4. Vercel deployment (fixes the original missing DataSource URL)
-
-Vercel Container Runtime starts Java directly using [Dockerfile.vercel](../Dockerfile.vercel) — it does **not** run the local Node wrapper or `docker-compose.yml`. Put **JDBC-format** variables in the existing Vercel project's Environment Variables, separately for Production and Preview:
+Add these environment variables to Catalog's runtime *only when ready*:
 
 ```dotenv
-SPRING_DATASOURCE_URL=jdbc:postgresql://YOUR_NEON_DIRECT_HOST:5432/YOUR_DB?sslmode=require
-SPRING_DATASOURCE_USERNAME=YOUR_NEON_DB_USER
-SPRING_DATASOURCE_PASSWORD=YOUR_NEON_DB_PASSWORD
-CATALOG_DB_MAX_POOL_SIZE=3
-CATALOG_DB_MIN_IDLE=0
-AFTERFORM_CORS_ORIGINS=https://trminhkhoi76-code.github.io
+AFTERFORM_MEDIA_ENABLED=true
+AFTERFORM_MEDIA_BUCKET=afterform-media
+AWS_ENDPOINT_URL_S3=https://YOUR_BRANCH.storage.YOUR_REGION.aws.neon.tech
+AWS_REGION=YOUR_NEON_STORAGE_REGION
+AWS_ACCESS_KEY_ID=YOUR_NEON_STORAGE_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_NEON_STORAGE_SECRET_KEY
 ```
 
-Select the host/user/password from the `DATABASE_URL_UNPOOLED` output; do not paste the entire `postgresql://user:pass@host/db` URI into `SPRING_DATASOURCE_URL` because it is not a valid JDBC URL. Add the `AWS_*` vars and `AFTERFORM_MEDIA_BUCKET` to Vercel only once a protected media/admin workflow actually uses storage. Secrets belong in Vercel Settings, not GitHub source.
+Use the exact endpoint/region/credentials from Neon Object Storage; the
+PostgreSQL hostname is **not** an S3 endpoint. Without
+`AFTERFORM_MEDIA_ENABLED=true`, no S3 beans are created and **none** of these
+storage variables are required. This keeps a DB-only Vercel deployment healthy.
 
-After setting Vercel env, **redeploy**; do not expect an old deployment to pick up new vars. Check Vercel runtime logs, `/actuator/health`, and the API root. If startup still fails, copy only the error trace and redact DB URLs/tokens.
+Credentials are read by the AWS SDK default credentials provider from
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. The service is for trusted
+backend code, not an anonymous upload API. Object keys are tenant-scoped under
+`stores/{storeId}/media/{mediaId}`; the adapter accepts PNG/JPEG/WebP up to
+5 MiB and creates 5-minute signed PUT URLs. The future authenticated Admin API
+must verify tenant ownership and inspect/validate uploaded bytes before using
+untrusted files. Object Storage is **not** an authentication boundary.
 
-## 5. What this does *not* implement
+### Tests
 
-- Neon project authorization/provisioning is an **external action**; committing `neon.ts` alone does not mean `neon deploy` succeeded.
-- This PR adds an **internal** storage adapter, not public/admin upload endpoints; identity/RBAC and content validation still block untrusted uploads.
-- No online payment, media CDN, customer signup or automated migration promotion.
-- Do not report a production integration as healthy based solely on Node unit tests or disposable GitHub PostgreSQL CI.
+Normal CI: Java unit/integration tests + offline S3 SigV4 presigning tests.
+They use disposable PostgreSQL 16 and **do not call real Neon**.
 
-Official references: [Neon agent skill](https://github.com/neondatabase/agent-skills/blob/main/skills/neon/SKILL.md), [Neon Object Storage](https://github.com/neondatabase/website/blob/main/content/docs/storage/get-started.md), [Spring Data SQL](https://docs.spring.io/spring-boot/reference/data/sql.html).
+To verify actual Neon storage manually with temporary files after setting the
+`AWS_*` variables, set `AFTERFORM_MEDIA_BUCKET=afterform-media` and run:
+
+```bash
+NEON_LIVE_STORAGE_TEST=true mvn -B -ntp -pl catalog-service -Dtest=NeonMediaStorageLiveTests test
+```
+
+This is an **opt-in live PUT → GET → DELETE** test. It requires a provisioned
+bucket and valid credentials; it must not run on ordinary CI or be claimed
+successful unless its output shows success. It is separate from the normal
+`mvn clean verify` build. Do not log or commit S3 secrets.
+
+## Deployment safety
+
+- Catalog is the only Spring Boot module deployed by `Dockerfile.vercel`.
+- The Commerce service remains independent and is not published through
+  this Vercel project.
+- The app continues to use Spring's `SPRING_DATASOURCE_*` and Flyway.
+- PostgreSQL and storage URLs must not be hardcoded in application source.
+- Do not enable public uploads without OIDC/tenant authorization.
+- Do not merge before CI verifies all Java tests; do not claim Neon storage
+  has been provisioned solely because this PR contains an S3 adapter.
+
+Further reading: https://neon.com/docs/storage/get-started

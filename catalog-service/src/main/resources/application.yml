@@ -30,3 +30,7 @@ management:
 afterform:
   cors:
     allowed-origins: ${AFTERFORM_CORS_ORIGINS:http://localhost:8137,https://trminhkhoi76-code.github.io}
+  media:
+    # Remain disabled until Neon bucket and S3 credentials have been configured.
+    enabled: ${AFTERFORM_MEDIA_ENABLED:false}
+    bucket: ${AFTERFORM_MEDIA_BUCKET:afterform-media}

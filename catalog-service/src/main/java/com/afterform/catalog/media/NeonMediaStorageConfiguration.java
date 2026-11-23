@@ -10,9 +10,12 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
-/** Uses Neon AWS_* environment variables with the official AWS SDK. */
+/**
+ * Optional Neon S3-compatible Object Storage. Plain PostgreSQL deployments must
+ * not require S3 environment variables or try to create an S3 client.
+ */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "AFTERFORM_MEDIA_BUCKET")
+@ConditionalOnProperty(name = "afterform.media.enabled", havingValue = "true")
 public class NeonMediaStorageConfiguration {
     @Bean(destroyMethod = "close")
     S3Client neonS3Client(@Value("${AWS_ENDPOINT_URL_S3}") String endpoint,
@@ -34,7 +37,7 @@ public class NeonMediaStorageConfiguration {
 
     @Bean
     NeonMediaStorage neonMediaStorage(S3Client neonS3Client, S3Presigner neonS3Presigner,
-                                     @Value("${AFTERFORM_MEDIA_BUCKET}") String bucket) {
+                                     @Value("${afterform.media.bucket}") String bucket) {
         return new NeonMediaStorage(neonS3Client, neonS3Presigner, bucket);
     }
 }
