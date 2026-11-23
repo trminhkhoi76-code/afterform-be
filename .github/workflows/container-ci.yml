@@ -15,6 +15,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate local Compose topology
         run: docker compose --env-file .env.example config --quiet
+      - name: Validate Coolify staging Compose
+        env:
+          CATALOG_DB_PASSWORD: ci-placeholder
+          COMMERCE_DB_PASSWORD: ci-placeholder
+        run: docker compose -f deploy/staging/compose.yml config --quiet
       - name: Build catalog image
         run: docker build -f deploy/docker/catalog.Dockerfile -t afterform/catalog-service:ci .
       - name: Build commerce image
