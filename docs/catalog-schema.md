@@ -12,7 +12,7 @@ This Flyway migration is **catalog-service only**. It deliberately excludes `ord
 Local smoke test (disposable PostgreSQL database):
 
 ```bash
-psql -v ON_ERROR_STOP=1 "$CATALOG_DB_URL" -f catalog-service/src/main/resources/db/migration/V1__catalog_schema.sql
+psql -1 -v ON_ERROR_STOP=1 "$CATALOG_DB_URL" -f catalog-service/src/main/resources/db/migration/V1__catalog_schema.sql
 psql -v ON_ERROR_STOP=1 "$CATALOG_DB_URL" -f db/tests/catalog-isolation.sql
 ```
 
