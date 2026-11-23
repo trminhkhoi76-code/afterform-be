@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ public class InventoryService {
     private final InventoryMovementRepository movements;
     private final Clock clock;
 
+    @Autowired
     public InventoryService(InventoryBalanceRepository balances,
                             InventoryReservationRepository reservations,
                             InventoryMovementRepository movements) {
