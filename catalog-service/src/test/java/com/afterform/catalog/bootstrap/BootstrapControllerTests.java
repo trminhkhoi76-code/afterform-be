@@ -4,14 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import java.util.Optional;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class BootstrapControllerTests {
-    private final String json = """
-        {"store":{"slug":"beauty","name":"Beauty"},"products":[],"home":{},"looks":[]}
-        """;
+    private final Map<String, Object> json = Map.of(
+        "store", Map.of("slug", "beauty", "name", "Beauty"),
+        "products", List.of(),
+        "home", Map.of(),
+        "looks", List.of()
+    );
 
     @Test
     void validPublishedEmptyCatalogReturnsJsonAndEtag() throws Exception {
