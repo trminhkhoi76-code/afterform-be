@@ -1,0 +1,42 @@
+name: Database schema validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-schema-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: afterform_test
+          POSTGRES_PASSWORD: afterform_test
+          POSTGRES_DB: afterform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U afterform_test -d afterform_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: afterform_test
+      PGPASSWORD: afterform_test
+      PGDATABASE: afterform_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply proposed migration to disposable PostgreSQL
+        run: psql -v ON_ERROR_STOP=1 -f db/migrations/0001_initial_design.sql
+      - name: Verify tenant isolation, publishing and stock invariants
+        run: psql -v ON_ERROR_STOP=1 -f db/tests/tenant-isolation.sql
