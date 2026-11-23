@@ -28,6 +28,9 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/catalog_ci
       SPRING_DATASOURCE_USERNAME: catalog_ci
       SPRING_DATASOURCE_PASSWORD: catalog_ci
+      COMMERCE_DB_URL: jdbc:postgresql://localhost:5432/catalog_ci
+      COMMERCE_DB_USERNAME: catalog_ci
+      COMMERCE_DB_PASSWORD: catalog_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
